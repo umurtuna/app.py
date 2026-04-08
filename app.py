@@ -1,10 +1,10 @@
 import streamlit as st
 
-st.set_page_config(page_title="Gıda Hesaplayıcı", layout="centered")
+st.set_page_config(page_title="Gıda Reçete Analizi", layout="centered")
 
 st.title("🧪 Gıda Reçete & Maliyet Hesaplayıcı")
 
-# Basit Veri Sözlüğü (Hafıza)
+# Veri Yapısı (Hafıza)
 if 'materials' not in st.session_state:
     st.session_state.materials = {
         "Yağ": {"kcal": 900, "fiyat": 100},
@@ -13,13 +13,14 @@ if 'materials' not in st.session_state:
 
 # Sol Panel: Hammadde Ekleme
 with st.sidebar:
-    st.header("📦 Malzeme Ekle")
+    st.header("📦 Yeni Malzeme")
     name = st.text_input("Malzeme Adı")
-    cal = st.number_input("Kalori (kcal/100g)", value=0.0)
+    cal = st.number_input("Enerji (kcal/100g)", value=0.0)
     price = st.number_input("Fiyat (TL/kg)", value=0.0)
     if st.button("Listeye Ekle"):
-        st.session_state.materials[name] = {"kcal": cal, "fiyat": price}
-        st.success(f"{name} eklendi!")
+        if name:
+            st.session_state.materials[name] = {"kcal": cal, "fiyat": price}
+            st.success(f"{name} eklendi!")
 
 # Ana Panel: Reçete
 st.subheader("📋 Reçete Oluştur")
@@ -32,7 +33,7 @@ total_pct = 0
 
 if selected:
     for m in selected:
-        pct = st.number_input(f"{m} Oranı (%)", min_value=0.0, max_value=100.0)
+        pct = st.number_input(f"{m} Oranı (%)", min_value=0.0, max_value=100.0, key=f"input_{m}")
         total_pct += pct
         total_cal += (st.session_state.materials[m]["kcal"] * (pct / 100))
         total_cost += (st.session_state.materials[m]["fiyat"] * (pct / 100))
@@ -41,4 +42,8 @@ if selected:
         if total_pct != 100:
             st.error(f"Toplam oran %100 olmalı! (Şu an: %{total_pct})")
         else:
-            st.success(f"### Sonuç (100g için)\n**Enerji:** {total_cal} kcal  \n**Maliyet:** {total_cost} TL")
+            st.divider()
+            st.success(f"### Analiz Sonucu (100g için)")
+            col1, col2 = st.columns(2)
+            col1.metric("Enerji", f"{round(total_cal, 2)} kcal")
+            col2.metric("Maliyet", f"{round(total_cost, 2)} TL")
