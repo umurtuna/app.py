@@ -14,7 +14,7 @@ def verileri_yukle():
         return {
             "malzemeler": {}, 
             "receteler": {}, 
-            "kurlar": {"USD": 32.5, "EUR": 35.0}
+            "kurlar": {"USD": 44.30, "EUR": 51.95}
         }
 
 def verileri_kaydet(veri):
