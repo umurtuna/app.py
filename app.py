@@ -1,4 +1,36 @@
 import streamlit as st
+
+# --- GÜVENLİK AYARLARI ---
+# Buradaki şifreyi dilediğin zaman değiştirebilirsin.
+ERISIM_SIFRESI = "NMR170" 
+
+# Giriş durumunu kontrol et
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+
+def check_password():
+    """Şifre kontrol fonksiyonu"""
+    if st.session_state["authenticated"]:
+        return True
+    
+    st.title("🔒 Cocoa Works Güvenli Giriş")
+    sifre_input = st.text_input("Lütfen erişim şifresini girin:", type="password")
+    
+    if st.button("Giriş Yap"):
+        if sifre_input == ERISIM_SIFRESI:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("❌ Hatalı şifre! Erişim reddedildi.")
+    return False
+
+# Eğer şifre doğru değilse, uygulamanın geri kalanını çalıştırmayı durdur
+if not check_password():
+    st.stop()
+
+# --- UYGULAMANIN GERİ KALANI BURADAN İTİBAREN DEVAM EDER ---
+# (Daha önce yazdığımız V6 kodlarını buranın altına yapıştırabilirsin)
+import streamlit as st
 import json
 import pandas as pd
 
