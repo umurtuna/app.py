@@ -26,22 +26,27 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def verileri_yukle():
     try:
-        # Sayfaları oku
         malz_df = conn.read(worksheet="malzemeler", ttl=0)
-        rece_df = conn.read(worksheet="receteler", ttl=0)
-        kur_df = conn.read(worksheet="kurlar", ttl=0)
         
-        # DataFrame'leri eski sözlük yapısına çevir (Kodun geri kalanı bozulmasın diye)
+        # --- Sayı Düzenleme Yaması ---
+        if not malz_df.empty:
+            # Sayısal olması gereken kolonlar
+            sayisal_kolonlar = ["enerji", "yag", "karb", "seker", "lif", "protein", "tuz", "fiyat"]
+            for col in sayisal_kolonlar:
+                if col in malz_df.columns:
+                    # Virgülleri noktaya çevir ve sayıya dönüştür
+                    malz_df[col] = malz_df[col].astype(str).str.replace(',', '.', regex=False)
+                    malz_df[col] = pd.to_numeric(malz_df[col], errors='coerce').fillna(0)
+        # ----------------------------
+
         return {
             "malzemeler": malz_df.set_index("ad").to_dict('index') if not malz_df.empty else {},
-            "receteler_tablo": rece_df if not rece_df.empty else pd.DataFrame(columns=["recete_ad", "malzeme", "miktar_g"]),
-            "kurlar": kur_df.set_index("doviz")["oran"].to_dict() if not kur_df.empty else {"USD": 32.5, "EUR": 35.0}
+            "receteler_tablo": conn.read(worksheet="receteler", ttl=0),
+            "kurlar": conn.read(worksheet="kurlar", ttl=0).set_index("doviz")["oran"].to_dict()
         }
-    except:
-        return {"malzemeler": {}, "receteler_tablo": pd.DataFrame(columns=["recete_ad", "malzeme", "miktar_g"]), "kurlar": {"USD": 32.5, "EUR": 35.0}}
-
-# Veriyi başlat
-data = verileri_yukle()
+    except Exception as e:
+        st.error(f"Bağlantı Hatası: {e}")
+        return {"malzemeler": {}, "receteler_tablo": pd.DataFrame(), "kurlar": {"USD": 32.5, "EUR": 35.0}}
 
 # --- YARDIMCI FONKSİYONLAR ---
 def besin_analizi_yap(df, malzemeler, kurlar):
