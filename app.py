@@ -3,26 +3,26 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 
 # 1. AYARLAR
-st.set_page_config(page_title="Umur Tuna ERP V17.3", layout="wide")
+st.set_page_config(page_title="Umur Tuna ERP", layout="wide")
 
 # 2. GÜVENLİK
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
 if not st.session_state["authenticated"]:
-    st.title("🔒 COA Works Güvenli Giriş")
-    s = st.text_input("Şifre:", type="password", key="v17_3_gate")
+    st.title("🔒 Umur Tuna ERP Güvenli Giriş")
+    s = st.text_input("Şifre:", type="password", key="erp_secure_gate")
     if st.button("Giriş"):
         if s == "NMR170":
             st.session_state["authenticated"] = True
             st.rerun()
     st.stop()
 
-# 3. VERİ YÜKLEME (ÖNBELLEKLİ)
+# 3. VERİ YÜKLEME
 BASE_URL = "https://docs.google.com/spreadsheets/d/1MGFvl8K4Hv1J6HHltgiQFgaE8GX0pG6CbXEHAfNI8Vo/edit"
 
 @st.cache_data(ttl=600)
-def verileri_yukle_v17_3():
+def verileri_yukle_erp():
     data_yapisi = {"malzemeler": {}, "receteler_tablo": pd.DataFrame(), "kurlar": {"USD": 32.5, "EUR": 35.0}}
     conn = st.connection("gsheets", type=GSheetsConnection)
     try:
@@ -33,7 +33,7 @@ def verileri_yukle_v17_3():
                 if col in m_df.columns:
                     m_df[col] = pd.to_numeric(m_df[col].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
             data_yapisi["malzemeler"] = m_df.set_index("ad").to_dict('index')
-        
+            
         r_df = conn.read(spreadsheet=BASE_URL, worksheet="2130732789", ttl=0)
         if r_df is not None:
             r_df.columns = [c.strip().lower() for c in r_df.columns]
@@ -50,15 +50,18 @@ if st.sidebar.button("🔄 Verileri Güncelle"):
     st.cache_data.clear()
     st.rerun()
 
-data = verileri_yukle_v17_3()
+data = verileri_yukle_erp()
 besin_kalemleri = ["enerji", "yag", "karb", "seker", "lif", "protein", "tuz"]
 
 # 4. HESAPLAMA MOTORU
 def besin_analizi_yap(df, malzemeler, kurlar):
     analiz = {k: 0.0 for k in besin_kalemleri + ["maliyet"]}
     df_calc = df.copy()
-    df_calc["Miktar (g)"] = pd.to_numeric(df_calc["Miktar (g)"], errors='coerce').fillna(0.0)
-    t_gram = df_calc["Miktar (g)"].sum()
+    if "Miktar (g)" in df_calc.columns:
+        df_calc["Miktar (g)"] = pd.to_numeric(df_calc["Miktar (g)"], errors='coerce').fillna(0.0)
+        t_gram = df_calc["Miktar (g)"].sum()
+    else: t_gram = 0
+    
     if t_gram == 0: return analiz, 0
     for _, row in df_calc.iterrows():
         m_ad = str(row["Malzeme"]).lower().strip()
@@ -72,74 +75,52 @@ def besin_analizi_yap(df, malzemeler, kurlar):
     return analiz, t_gram
 
 # 5. MENÜ
-menu = st.sidebar.radio("Menü", ["📦 Envanter", "🧪 Reçete Hazırla", "🍰 Katmanlı Ürün", "📋 Arşiv"])
+menu = st.sidebar.radio("Menü", ["📦 Hammaddeler", "🧪 Reçete Hazırla", "🍰 Katmanlı Ürün", "🔬 Katmanlı Ürün Deneme", "📋 Arşiv"])
 
-if menu == "🧪 Reçete Hazırla":
+# --- HAMMADDELER ---
+if menu == "📦 Hammaddeler":
+    st.header("📦 Hammadde Listesi")
+    st.dataframe(pd.DataFrame.from_dict(data["malzemeler"], orient='index'), use_container_width=True)
+
+# --- REÇETE HAZIRLA ---
+elif menu == "🧪 Reçete Hazırla":
     st.header("🧪 Reçete Hazırlama")
+    if 'gecici_erp' not in st.session_state: st.session_state.gecici_erp = pd.DataFrame(columns=["Malzeme", "Miktar (g)"])
     
-    if 'gecici_v17_3' not in st.session_state:
-        st.session_state.gecici_v17_3 = pd.DataFrame(columns=["Malzeme", "Miktar (g)"])
-
-    col1, col2 = st.columns([3, 1])
+    c1, c2 = st.columns([3, 1])
     m_list = sorted(data["malzemeler"].keys())
-    secilen_m = col1.selectbox("Malzeme Seç", m_list, key="v17_3_m_sel")
-    
-    if col2.button("➕ Listeye Ekle"):
-        yeni = pd.DataFrame([{"Malzeme": secilen_m, "Miktar (g)": 0.0}])
-        st.session_state.gecici_v17_3 = pd.concat([st.session_state.gecici_v17_3, yeni], ignore_index=True)
+    secilen_m = c1.selectbox("Malzeme Seç", m_list, key="erp_m_sel")
+    if c2.button("➕ Ekle"):
+        st.session_state.gecici_erp = pd.concat([st.session_state.gecici_erp, pd.DataFrame([{"Malzeme": secilen_m, "Miktar (g)": 0.0}])], ignore_index=True)
         st.rerun()
 
-    # VERİ EDİTÖRÜ (Statik Kalması İçin)
-    edited_data = st.data_editor(
-        st.session_state.gecici_v17_3,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="v17_3_editor"
-    )
-    st.session_state.gecici_v17_3 = edited_data
+    edited_data = st.data_editor(st.session_state.gecici_erp, num_rows="dynamic", use_container_width=True, key="erp_editor")
+    st.session_state.gecici_erp = edited_data
 
     if not edited_data.empty:
-        # Analiz Sonuçlarını her zaman göster (rakam değiştikçe anlık görmek iyidir)
         res, tg = besin_analizi_yap(edited_data, data["malzemeler"], data["kurlar"])
         if tg > 0:
             st.divider()
-            st.subheader(f"📊 Anlık Analiz ({tg:.1f}g)")
+            st.subheader(f"📊 Analiz ({tg:.1f}g)")
             c = st.columns(7)
-            etiketler = ["Enerji", "Yağ", "Karb", "Şeker", "Lif", "Prot", "Tuz"]
-            keys = ["enerji", "yag", "karb", "seker", "lif", "protein", "tuz"]
-            for i in range(7):
-                c[i].metric(etiketler[i], f"{res[keys[i]]/(tg/100):.1f}")
+            for i, b in enumerate(besin_kalemleri): c[i].metric(b.capitalize(), f"{res[b]/(tg/100):.1f}")
             st.metric("💰 KG Maliyeti", f"{(res['maliyet']/tg*1000):.2f} TL")
 
         st.divider()
-        st.subheader("📋 Arşivleme Hazırlığı")
-        
-        # İSİM GİRİŞİ VE BUTON
+        st.subheader("📋 Arşivle")
         c_name, c_btn = st.columns([3, 1])
-        r_adi = c_name.text_input("Ürün İsmi:", value="urun_01", key="v17_3_pname")
-        olustur_btn = c_btn.button("📥 Excel Formatına Dönüştür")
-
-        if olustur_btn:
+        r_adi = c_name.text_input("Ürün İsmi:", value="urun_01")
+        if c_btn.button("📥 Excel Formatı"):
             tablo_text = ""
             for _, row in edited_data.iterrows():
-                m_isim = str(row['Malzeme']).strip()
-                if m_isim and m_isim != "None":
-                    m_miktar = str(row['Miktar (g)']).replace('.', ',')
-                    tablo_text += f"{r_adi}\t{m_isim}\t{m_miktar}\n"
-            
-            st.success("Format Hazır! Aşağıdaki kutudan kopyalayabilirsiniz.")
-            st.text_area("Kopyala ve Excel'e Yapıştır:", value=tablo_text, height=200, key="v17_3_copy_final")
-        else:
-            st.info("Kopyalanacak metni görmek için 'Excel Formatına Dönüştür' butonuna basın.")
+                if str(row['Malzeme']).strip() and str(row['Malzeme']) != "None":
+                    tablo_text += f"{r_adi}\t{row['Malzeme']}\t{str(row['Miktar (g)']).replace('.', ',')}\n"
+            st.text_area("Kopyala ve Excel'e Yapıştır:", value=tablo_text, height=200)
 
-# Diğer sayfalar (Envanter, Katmanlı, Arşiv) V17.2 ile aynı mantıkta çalışır...
-elif menu == "📦 Envanter":
-    st.header("📦 Malzeme Envanteri")
-    st.dataframe(pd.DataFrame.from_dict(data["malzemeler"], orient='index'), use_container_width=True)
-
+# --- KATMANLI ÜRÜN (KAYITLI) ---
 elif menu == "🍰 Katmanlı Ürün":
-    st.header("🍰 Katmanlı Ürün Analizi")
-    if data["receteler_tablo"].empty: st.warning("Reçete bulunamadı.")
+    st.header("🍰 Kayıtlı Reçetelerden Katmanlı Ürün")
+    if data["receteler_tablo"].empty: st.warning("Arşiv boş.")
     else:
         k_sayisi = st.number_input("Katman Sayısı", 1, 5, 2)
         r_list = sorted(data["receteler_tablo"]["recete_ad"].unique())
@@ -155,8 +136,7 @@ elif menu == "🍰 Katmanlı Ürün":
         if abs(t_oran - 100) < 0.1 and st.button("🧬 Hesapla"):
             final = {k: 0.0 for k in besin_kalemleri + ["maliyet"]}
             for k in k_verileri:
-                r_df = data["receteler_tablo"][data["receteler_tablo"]["recete_ad"] == k["ad"]].copy()
-                r_df = r_df.rename(columns={"malzeme": "Malzeme", "miktar_g": "Miktar (g)"})
+                r_df = data["receteler_tablo"][data["receteler_tablo"]["recete_ad"] == k["ad"]].copy().rename(columns={"malzeme": "Malzeme", "miktar_g": "Miktar (g)"})
                 r_res, r_tg = besin_analizi_yap(r_df, data["malzemeler"], data["kurlar"])
                 if r_tg > 0:
                     p = k["oran"] / 100
@@ -165,17 +145,57 @@ elif menu == "🍰 Katmanlı Ürün":
             st.table(pd.DataFrame({k: [round(final[k], 2)] for k in besin_kalemleri}))
             st.metric("Final KG Maliyeti", f"{final['maliyet']:.2f} TL")
 
+# --- KATMANLI ÜRÜN DENEME (YENİ) ---
+elif menu == "🔬 Katmanlı Ürün Deneme":
+    st.header("🔬 Serbest Katmanlı Ürün Denemesi")
+    st.info("Kayıtlı olmayan reçeteleri burada anlık oluşturup birleştirebilirsiniz.")
+    
+    deneme_sayisi = st.number_input("Kaç farklı deneme reçetesi birleşecek?", 1, 3, 2)
+    final_deneme = {k: 0.0 for k in besin_kalemleri + ["maliyet"]}
+    toplam_yuzde = 0.0
+    
+    for i in range(int(deneme_sayisi)):
+        with st.expander(f"Deneme Reçetesi {i+1} Detayları", expanded=True):
+            c_oran, c_bos = st.columns([1, 3])
+            r_yuzde = c_oran.number_input(f"Reçete {i+1} Karışım Oranı (%)", 0.0, 100.0, key=f"den_y_{i}")
+            toplam_yuzde += r_yuzde
+            
+            if f'deneme_df_{i}' not in st.session_state:
+                st.session_state[f'deneme_df_{i}'] = pd.DataFrame(columns=["Malzeme", "Miktar (g)"])
+            
+            col_m, col_b = st.columns([3, 1])
+            m_sec_den = col_m.selectbox(f"Malzeme Seç ({i+1})", sorted(data["malzemeler"].keys()), key=f"den_m_{i}")
+            if col_b.button(f"Ekle", key=f"den_btn_{i}"):
+                st.session_state[f'deneme_df_{i}'] = pd.concat([st.session_state[f'deneme_df_{i}'], pd.DataFrame([{"Malzeme": m_sec_den, "Miktar (g)": 0.0}])], ignore_index=True)
+                st.rerun()
+            
+            d_edit = st.data_editor(st.session_state[f'deneme_df_{i}'], num_rows="dynamic", use_container_width=True, key=f"den_ed_{i}")
+            st.session_state[f'deneme_df_{i}'] = d_edit
+            
+            d_res, d_tg = besin_analizi_yap(d_edit, data["malzemeler"], data["kurlar"])
+            if d_tg > 0:
+                p = r_yuzde / 100
+                for b in besin_kalemleri: final_deneme[b] += (d_res[b] / (d_tg / 100)) * p
+                final_deneme["maliyet"] += (d_res["maliyet"] / (d_tg / 1000)) * p
+                st.caption(f"Bu katmanın KG maliyeti: {d_res['maliyet']/d_tg*1000:.2f} TL")
+
+    st.divider()
+    if abs(toplam_yuzde - 100) < 0.1:
+        st.subheader("🧪 Karma Deneme Sonucu (100g)")
+        st.table(pd.DataFrame({k.capitalize(): [round(final_deneme[k], 2)] for k in besin_kalemleri}))
+        st.metric("Karma KG Maliyeti", f"{final_deneme['maliyet']:.2f} TL")
+    else:
+        st.warning(f"Toplam karışım oranı %100 olmalı. (Şu an: %{toplam_yuzde})")
+
+# --- ARŞİV ---
 elif menu == "📋 Arşiv":
     st.header("📋 Reçete Arşivi")
     if not data["receteler_tablo"].empty:
-        r_list = sorted(data["receteler_tablo"]["recete_ad"].unique())
-        sec = st.selectbox("Reçete Seç", r_list)
+        sec = st.selectbox("Reçete Seç", sorted(data["receteler_tablo"]["recete_ad"].unique()))
         df_arsiv = data["receteler_tablo"][data["receteler_tablo"]["recete_ad"] == sec].rename(columns={"malzeme": "Malzeme", "miktar_g": "Miktar (g)"})
         st.dataframe(df_arsiv[["Malzeme", "Miktar (g)"]], use_container_width=True)
         res, tg = besin_analizi_yap(df_arsiv, data["malzemeler"], data["kurlar"])
         if tg > 0:
-            st.subheader("Besin Analizi (100g)")
             c = st.columns(7)
-            for i, b in enumerate(besin_kalemleri):
-                c[i].metric(b.capitalize(), f"{res[b]/(tg/100):.2f}")
+            for i, b in enumerate(besin_kalemleri): c[i].metric(b.capitalize(), f"{res[b]/(tg/100):.2f}")
             st.metric("Maliyet (KG)", f"{res['maliyet']/tg*1000:.2f} TL")
